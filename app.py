@@ -652,10 +652,18 @@ if run_btn:
             annotated, summary = monitor.process_frame(frame)
             writer.write(annotated)
 
-            annotated_rgb = cv2.cvtColor(annotated, cv2.COLOR_BGR2RGB)
-            video_placeholder.image(annotated_rgb, channels="RGB", use_container_width=True)
+            # ✅ FIX: Safe check for annotated image
+            if annotated is not None and isinstance(annotated, np.ndarray) and annotated.size > 0:
+                try:
+                    annotated_rgb = cv2.cvtColor(annotated, cv2.COLOR_BGR2RGB)
+                    video_placeholder.image(annotated_rgb, channels="RGB", use_container_width=True)
+                except Exception:
+                    # Fallback: show original frame
+                    video_placeholder.image(frame, channels="BGR", use_container_width=True)
+            else:
+                # Fallback: show original frame
+                video_placeholder.image(frame, channels="BGR", use_container_width=True)
 
-            # ✅ SAHI TARIKA - unsafe_allow_html=True ke saath
             stats_placeholder.markdown(
                 render_stats(summary["total"], summary["counts"]),
                 unsafe_allow_html=True
@@ -725,7 +733,7 @@ else:
     # Idle state
     stats_placeholder.markdown(
         render_stats(0, {}),
-        unsafe_allow_html=True  # ✅ Yeh important hai!
+        unsafe_allow_html=True
     )
     with video_placeholder.container():
         st.markdown("""
