@@ -1,5 +1,6 @@
 ultralytics==8.4.102
 opencv-python-headless==4.10.0.84
+opencv-python==0.0.0  # ❌ Block non-headless version
 streamlit==1.38.0
 numpy==1.26.4
 pandas==2.2.2
