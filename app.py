@@ -7,7 +7,6 @@ import os
 import subprocess
 import tempfile
 import time
-import math
 import textwrap
 
 import numpy as np
@@ -527,16 +526,7 @@ def reencode_to_h264(input_path: str) -> str:
 def render_stats(total: int, counts: dict):
     """
     Render professional stats with bars - ONLY VEHICLE CLASSES.
-
-    IMPORTANT FIX:
-    Markdown treats any line that starts with 4+ leading spaces as a
-    CODE BLOCK. Because this HTML string is built inside an indented
-    Python function, every line was carrying extra leading whitespace,
-    so Streamlit was rendering the raw HTML tags instead of the actual
-    styled stats. textwrap.dedent() strips that common leading
-    whitespace so Markdown renders it as real HTML again.
     """
-
     # SIRF YEH CLASSES DIKHENGE (Vehicle classes)
     VEHICLE_MAP = {
         "car": "🚗",
@@ -556,19 +546,16 @@ def render_stats(total: int, counts: dict):
         name_lower = name.lower()
         for v_key in VEHICLE_MAP.keys():
             if v_key in name_lower or name_lower in v_key:
-                # Correct capitalization
                 display_name = name.title()
                 filtered_counts[display_name] = val
                 break
 
-    # Agar koi vehicle nahi mili toh empty dikhao
     if not filtered_counts:
         filtered_counts = {}
 
     items = sorted(filtered_counts.items(), key=lambda x: -x[1])
     max_count = max([v for _, v in items], default=1) or 1
 
-    # ✅ HTML BUILD KARO — sabhi lines ko dedent-safe rakha gaya hai
     rows_html = ""
     if not items or all(v == 0 for _, v in items):
         rows_html = '<div style="text-align:center; color:#64748b; padding:20px 0;">No vehicles detected yet</div>'
@@ -577,7 +564,6 @@ def render_stats(total: int, counts: dict):
             if val == 0:
                 continue
             pct = (val / max_count) * 100 if max_count else 0
-            # Emoji find karo
             icon = "🚘"
             for key, emoji in VEHICLE_MAP.items():
                 if key in name.lower():
@@ -606,9 +592,8 @@ def render_stats(total: int, counts: dict):
         {rows_html}
     </div>
     """
-
-    # ✅ FINAL FIX: dedent puri string pe, taaki Markdown code-block na samjhe
     return textwrap.dedent(html)
+
 
 # ============================================================================
 # PROCESSING LOGIC
@@ -624,20 +609,28 @@ if run_btn:
         tfile.close()
         video_path = tfile.name
 
-        monitor = TrafficMonitor(
-            model_path=model_path,
-            conf_thresh=conf_thresh,
-            pixels_per_meter=pixels_per_meter,
-            fps=video_fps
-        )
+        try:
+            monitor = TrafficMonitor(
+                model_path=model_path,
+                conf_thresh=conf_thresh,
+                pixels_per_meter=pixels_per_meter,
+                fps=video_fps
+            )
+        except Exception as e:
+            st.error(f"❌ Failed to initialize TrafficMonitor: {e}")
+            st.stop()
 
         cap = cv2.VideoCapture(video_path)
+        if not cap.isOpened():
+            st.error("❌ Failed to open video file.")
+            st.stop()
+
         frame_count = 0
 
         # Video writer for output
         frame_w = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
         frame_h = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
-        output_fps = max(video_fps / frame_skip, 1)
+        output_fps = max(video_fps / frame_skip, 1) if frame_skip > 0 else video_fps
         output_video_path = tempfile.NamedTemporaryFile(delete=False, suffix=".mp4").name
         fourcc = cv2.VideoWriter_fourcc(*"mp4v")
         writer = cv2.VideoWriter(output_video_path, fourcc, output_fps, (frame_w, frame_h))
@@ -650,43 +643,73 @@ if run_btn:
             if frame_count % frame_skip != 0:
                 continue
 
-            annotated, summary = monitor.process_frame(frame)
-            writer.write(annotated)
+            try:
+                annotated, summary = monitor.process_frame(frame)
+            except Exception as e:
+                st.error(f"⚠️ Error processing frame {frame_count}: {e}")
+                continue
 
-            # ✅ FIX: Safe check for annotated image
-            if annotated is not None and isinstance(annotated, np.ndarray) and annotated.size > 0:
-                try:
+            # Write annotated video
+            try:
+                if annotated is not None and isinstance(annotated, np.ndarray) and annotated.size > 0:
+                    writer.write(annotated)
+            except Exception:
+                pass
+
+            # Display image with safe check
+            display_success = False
+            try:
+                if annotated is not None and isinstance(annotated, np.ndarray) and annotated.size > 0:
                     annotated_rgb = cv2.cvtColor(annotated, cv2.COLOR_BGR2RGB)
                     video_placeholder.image(annotated_rgb, channels="RGB", use_container_width=True)
+                    display_success = True
+            except Exception:
+                pass
+
+            if not display_success:
+                try:
+                    if frame is not None and isinstance(frame, np.ndarray) and frame.size > 0:
+                        video_placeholder.image(frame, channels="BGR", use_container_width=True)
+                        display_success = True
                 except Exception:
-                    # Fallback: show original frame
-                    video_placeholder.image(frame, channels="BGR", use_container_width=True)
-            else:
-                # Fallback: show original frame
-                video_placeholder.image(frame, channels="BGR", use_container_width=True)
+                    pass
 
-            stats_placeholder.markdown(
-                render_stats(summary["total"], summary["counts"]),
-                unsafe_allow_html=True
-            )
+            if not display_success:
+                video_placeholder.empty()
 
-            df = monitor.get_log_dataframe()
-            if not df.empty:
-                table_placeholder.dataframe(
-                    df.sort_values("ID"),
-                    use_container_width=True,
-                    height=350,
-                    key=f"log_{frame_count}"
+            # Update stats
+            try:
+                stats_placeholder.markdown(
+                    render_stats(summary.get("total", 0), summary.get("counts", {})),
+                    unsafe_allow_html=True
                 )
+            except Exception:
+                stats_placeholder.markdown(
+                    render_stats(0, {}),
+                    unsafe_allow_html=True
+                )
+
+            # Update log table
+            try:
+                df = monitor.get_log_dataframe()
+                if not df.empty:
+                    table_placeholder.dataframe(
+                        df.sort_values("ID"),
+                        use_container_width=True,
+                        height=350,
+                        key=f"log_{frame_count}"
+                    )
+            except Exception:
+                pass
 
             time.sleep(0.01)
 
         cap.release()
         writer.release()
-        
+
         try:
             os.unlink(video_path)
-        except PermissionError:
+        except (PermissionError, FileNotFoundError):
             pass
 
         st.success("✅ Processing complete!")
@@ -694,13 +717,11 @@ if run_btn:
         # Show output video
         st.markdown("### 🎬 Annotated Video Output")
         if os.path.exists(output_video_path) and os.path.getsize(output_video_path) > 0:
-            # Re-encode to H.264 so it plays inline in the browser
             playable_path = reencode_to_h264(output_video_path)
 
             with open(playable_path, "rb") as vf:
                 video_bytes = vf.read()
 
-            # Clean up temp files
             try:
                 os.unlink(output_video_path)
             except (PermissionError, FileNotFoundError):
@@ -720,15 +741,18 @@ if run_btn:
             )
 
         # CSV Report
-        final_df = monitor.get_log_dataframe()
-        if not final_df.empty:
-            csv = final_df.to_csv(index=False).encode("utf-8")
-            st.download_button(
-                "⬇ Download CSV Report",
-                csv,
-                "traffic_report.csv",
-                "text/csv"
-            )
+        try:
+            final_df = monitor.get_log_dataframe()
+            if not final_df.empty:
+                csv = final_df.to_csv(index=False).encode("utf-8")
+                st.download_button(
+                    "⬇ Download CSV Report",
+                    csv,
+                    "traffic_report.csv",
+                    "text/csv"
+                )
+        except Exception:
+            pass
 
 else:
     # Idle state
