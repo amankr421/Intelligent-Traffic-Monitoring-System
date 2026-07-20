@@ -10,6 +10,7 @@ import time
 import math
 import textwrap
 
+import numpy as np
 import cv2
 import pandas as pd
 import streamlit as st
