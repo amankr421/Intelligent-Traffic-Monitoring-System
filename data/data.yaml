@@ -1,0 +1,12 @@
+# Dataset config for YOLOv8 training
+# Source: Roboflow -> "Vehicle_Detection Computer Vision Model" by ProjectTraffic (v11)
+# Download this dataset in YOLOv8 format from Roboflow and place it so the paths
+# below point to the extracted train/valid/test folders.
+
+path: ./data/Vehicle_Detection  # root dir after roboflow download/extract
+train: train/images
+val: valid/images
+test: test/images
+
+nc: 4
+names: ['Car', 'Bike', 'Bus', 'Truck']

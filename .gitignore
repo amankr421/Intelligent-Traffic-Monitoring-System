@@ -1,0 +1,23 @@
+# Python
+venv/
+__pycache__/
+*.pyc
+*.pyo
+.Python
+
+# Ultralytics / training runs
+runs/
+*.cache
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Streamlit
+.streamlit/secrets.toml
+
+# Environment
+.env
+
+# Large downloaded dataset (do not commit — re-download via download_dataset.py)
+data/Vehicle_Detection/
