@@ -661,7 +661,7 @@ if run_btn:
             try:
                 if annotated is not None and isinstance(annotated, np.ndarray) and annotated.size > 0:
                     annotated_rgb = cv2.cvtColor(annotated, cv2.COLOR_BGR2RGB)
-                    video_placeholder.image(annotated_rgb, channels="RGB", use_container_width=True)
+                    video_placeholder.image(annotated_rgb, channels="RGB", use_column_width=True)
                     display_success = True
             except Exception:
                 pass
@@ -669,7 +669,7 @@ if run_btn:
             if not display_success:
                 try:
                     if frame is not None and isinstance(frame, np.ndarray) and frame.size > 0:
-                        video_placeholder.image(frame, channels="BGR", use_container_width=True)
+                        video_placeholder.image(frame, channels="BGR", use_column_width=True)
                         display_success = True
                 except Exception:
                     pass
